@@ -1,0 +1,7 @@
+__pycache__
+env/
+*.swp
+
+sae-exercises-mats/
+temp.ipynb
+tinystories.py
