@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoTokenizer
 from datasets import load_dataset
 
 def get_tokenizer_and_loaders(cfg):

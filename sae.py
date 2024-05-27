@@ -2,11 +2,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM
 from utils import get_tokenizer_and_loaders
 
 from dataclasses import dataclass
-from datasets import load_dataset
 from tqdm import tqdm
 
 
@@ -15,7 +14,6 @@ class SAE(nn.Module):
     # we choose to train an SAE on the MLP activations in the 2nd layer
 
     def __init__(self, mlp_dim, hidden_ratio):
-        # TODO: change hidden ratio back to 256 (with more powerful hardware)
         super().__init__()
 
         self.encoder = nn.Linear(mlp_dim, mlp_dim * hidden_ratio)
@@ -38,15 +36,15 @@ class SAE(nn.Module):
         # f contains our learned features (hidden state)
         return x_hat, f
     
-def sae_loss(x, x_hat, f, lambd=0.008):
+def sae_loss(x, x_hat, f, lambd):
     # SAE reconstruction loss w/ sparsity penalty
     # x (MLP activations):    [batch_size, mlp_dim]
     # x_hat (reconstruction): [batch_size, mlp_dim]
-    # f:                      [batch_size resid_dim * hidden_ratio]
-    # lambd: L1 regularization (for sparsity) - TODO: may need tuning
+    # f (SAE activations):    [batch_size resid_dim * hidden_ratio]
+    # lambd: L1 regularization (for sparsity)
 
-    l2_squared_diff = (x - x_hat).norm(dim=1) ** 2 + lambd * f.norm(p=1)
-    return l2_squared_diff.mean()
+    penalized_l2_squared_diff = (x - x_hat).norm(dim=1) ** 2 + lambd * f.norm(p=1)
+    return penalized_l2_squared_diff.mean()
 
 def train_sae(cfg, sae, model, train_loader, val_loader):
     device = cfg.device
@@ -58,10 +56,9 @@ def train_sae(cfg, sae, model, train_loader, val_loader):
 
     # we choose to train an SAE on the MLP activations in the 2nd layer
     model.transformer.h[1].mlp.c_fc.register_forward_hook(layer2_mlp_hook)
+    model.eval() # don't need gradients from the transformer
 
-    model.eval()
-
-    opt = torch.optim.Adam(sae.parameters()) # TODO: pass in lr and other hyperparameters
+    opt = torch.optim.Adam(sae.parameters(), lr=cfg.lr)
 
     for epoch in tqdm(range(cfg.num_epochs)):
         with tqdm(train_loader) as pbar:
@@ -78,30 +75,42 @@ def train_sae(cfg, sae, model, train_loader, val_loader):
 
                 sae_reconstruction, sae_hidden_state = sae(mlp_activations)
 
-                loss = sae_loss(mlp_activations, sae_reconstruction, sae_hidden_state)
+                loss = sae_loss(mlp_activations, sae_reconstruction, sae_hidden_state, cfg.sae_l1_penalty)
                 opt.zero_grad()
                 loss.backward()
                 opt.step()
 
                 pbar.set_postfix(loss=loss.item())
-            
+                
             sae.eval()
-            # TODO: run validation
-            break
+            losses = []
+            for input_tokens in val_loader:
+                mlp_activations = []
+                model_output = model.generate(**input_tokens, max_length=cfg.max_ctx_len, num_beams=1)
+
+                mlp_activations = torch.cat(mlp_activations)
+                sae_reconstruction, sae_hidden_state = sae(mlp_activations)
+
+                losses.append(sae_loss(mlp_activations, sae_reconstruction, sae_hidden_state, cfg.sae_l1_penalty).item())
+            
+            avg_loss = torch.tensor(losses).mean()
+            print(f'Epoch {epoch} validation: loss {avg_loss:.4f}')
 
 
 @dataclass
 class Config:
-    device: str = 'mps' if torch.backends.mps.is_available() else 'cpu'
+    device: str = 'cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu')
     seed: int = 42
 
     trainset_size: int = 10000
-    batch_size: int = 32 # my laptop is weak
+    batch_size: int = 32 # increase on better hardware
     num_epochs: int = 50
+    lr: float = 3e-4
 
     mlp_dim: int = 4096
     max_ctx_len: int = 2048
-    sae_hidden_ratio: int = 1 # should be something more like 256 for serious training
+    sae_hidden_ratio: int = 1 # increase to ~256 on better hardware
+    sae_l1_penalty: float = 0.008  # definitely needs tuning
 
 
 if __name__ == '__main__':
