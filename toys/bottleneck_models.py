@@ -95,32 +95,36 @@ def train_bottleneck_model(cfg, model, feature_prob, importances):
             pbar.set_postfix(loss=loss.item())
             
 
-def plot_learned_features(cfg, models, feature_probs, importances):
+def plot_learned_features(cfg, weights, title, feature_probs=None, importances=None):
+
     fig = make_subplots(
         rows=1,
-        cols=len(models),
-        subplot_titles=[f'feat. prob. = {feature_prob:.3f}' for feature_prob in feature_probs]
+        cols=len(weights),
+        subplot_titles=[f'feat. prob. = {feature_prob:.3f}' for feature_prob in feature_probs] if feature_probs is not None else None
     )
 
-    for idx, model in enumerate(models):
-        feats = model.W.detach().cpu().numpy()
+    for idx, weight in enumerate(weights):
+        weight = weight.detach().cpu().numpy()
 
-        for feat_idx, feat in enumerate(feats):
+        if importances is None:
+            importances = torch.ones(weight.shape[0])
+
+        for feat_idx, feat in enumerate(weight):
             fig.add_trace(go.Scatter(
                 x = (0, feat[0]),
                 y = (0, feat[1]),
                 mode='lines+markers',
-                marker=dict(color=f'rgb(255, 197, {255 * importances[feat_idx]})', size=10),
-                line=dict(color=f'rgb(255, 197, {255 * importances[feat_idx]})'),
+                marker=dict(color=f'rgb(230, 172, {255 * importances[feat_idx]})', size=10),
+                line=dict(color=f'rgb(230, 172, {255 * importances[feat_idx]})'),
             ), row=1, col=idx+1)
 
             fig.update_xaxes(range=[-1.5, 1.5], row=1, col=idx+1)
             fig.update_yaxes(range=[-1.5, 1.5], row=1, col=idx+1)
 
     fig.update_layout(
-        width=400*len(models),
+        width=400*len(weights),
         height=400,
-        title_text='5 features represented in 2D space'
+        title_text=title
     )
     fig.show()
 
@@ -145,4 +149,11 @@ if __name__ == '__main__':
     for idx, model in enumerate(models):
         train_bottleneck_model(cfg, model, feature_probs[idx], importances)
     
-    plot_learned_features(cfg, models, feature_probs, importances)
+    weights = [model.W for model in models]
+    plot_learned_features(
+        cfg,
+        weights,
+        title='5 features represented in 2D space',
+        feature_probs=feature_probs,
+        importances=importances
+    )

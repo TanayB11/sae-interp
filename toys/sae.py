@@ -1,4 +1,5 @@
 # a (mostly) single-file implementation
+# run the main code on sae_demos.ipynb!
 # based on https://transformer-circuits.pub/2023/monosemantic-features/index.html
 # and https://colab.research.google.com/drive/15S4ISFVMQtfc0FPi29HRaX03dWxL65zx?usp=sharing
 
@@ -95,17 +96,3 @@ def train_sae(cfg, sae, model, feature_prob):
 
             pbar.set_postfix(loss=loss.item())
 
-
-if __name__ == '__main__':
-    cfg = Config()
-    device = cfg.device
-
-    # used to train model. see bottleneck_models.py for explanations/source
-    importances = (0.9 ** torch.arange(cfg.input_dim)).to(device)
-    model = Bottleneck_Model(cfg).to(device)
-    train_bottleneck_model(cfg, model, feature_prob=0.01, importances=importances)
-    # plot_learned_features(cfg, [model], [0.01], importances)
-
-    # setup for sae
-    sae = SAE(cfg).to(device)
-    train_sae(cfg, sae, model, feature_prob=0.01)
