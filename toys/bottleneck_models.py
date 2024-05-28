@@ -1,4 +1,4 @@
-# a (mostly) single-file implementation
+# a single-file implementation
 # based on https://transformer-circuits.pub/2022/toy_model/index.html#demonstrating
 # and https://colab.research.google.com/drive/15S4ISFVMQtfc0FPi29HRaX03dWxL65zx?usp=sharing
 
@@ -98,7 +98,7 @@ def train_bottleneck_mlp(cfg, model, feature_prob, importances):
             pbar.set_postfix(loss=loss.item())
             
 
-def plot_learned_features(cfg, models, feature_probs):
+def plot_learned_features(cfg, models, feature_probs, importances):
     fig = make_subplots(
         rows=1,
         cols=len(models),
@@ -108,12 +108,13 @@ def plot_learned_features(cfg, models, feature_probs):
     for idx, model in enumerate(models):
         feats = model.W.detach().cpu().numpy()
 
-        for vec in feats:
+        for feat_idx, feat in enumerate(feats):
             fig.add_trace(go.Scatter(
-                x = (0, vec[0]),
-                y = (0, vec[1]),
+                x = (0, feat[0]),
+                y = (0, feat[1]),
                 mode='lines+markers',
-                marker=dict(color='black', size=10),
+                marker=dict(color=f'rgb(255, 197, {255 * importances[feat_idx]})', size=10),
+                line=dict(color=f'rgb(255, 197, {255 * importances[feat_idx]})'),
             ), row=1, col=idx+1)
 
             fig.update_xaxes(range=[-1.5, 1.5], row=1, col=idx+1)
@@ -147,4 +148,4 @@ if __name__ == '__main__':
     for idx, model in enumerate(models):
         train_bottleneck_mlp(cfg, model, feature_probs[idx], importances)
     
-    plot_learned_features(cfg, models, feature_probs)
+    plot_learned_features(cfg, models, feature_probs, importances)
