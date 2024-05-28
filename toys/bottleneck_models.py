@@ -5,7 +5,6 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset
 
 from dataclasses import dataclass
 from tqdm import tqdm
@@ -19,7 +18,7 @@ class Config():
     device: str = 'cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu')
     seed: int = 42
 
-    # mlp config
+    # bottleneck model config
     input_dim: int = 5
     hidden_dim: int = 2
     output_dim: int = 5
@@ -67,7 +66,7 @@ def gen_artificial_data(cfg, feature_prob):
     return dataset
 
 
-def calc_reconstruction_loss(X_hat, X, importances):
+def reconstruction_loss(X_hat, X, importances):
     # basically just MSE
     # X_hat, X: [batch_size, input_dim]
     # importances: [input_dim]
@@ -75,10 +74,8 @@ def calc_reconstruction_loss(X_hat, X, importances):
     return (importances * ((X_hat - X) ** 2)).mean()
 
 
-def train_bottleneck_mlp(cfg, model, feature_prob, importances):
-    # one epoch over the entire trainset
+def train_bottleneck_model(cfg, model, feature_prob, importances):
     # no need for valset, since we don't care about real world performance here
-    #
     # importances: [input_dim]
 
     opt = torch.optim.Adam(model.parameters(), lr=cfg.lr)
@@ -89,7 +86,7 @@ def train_bottleneck_mlp(cfg, model, feature_prob, importances):
             X = gen_artificial_data(cfg, feature_prob) # [batch_size, input_dim]
             X_hat = model(X)
 
-            loss = calc_reconstruction_loss(X_hat, X, importances)
+            loss = reconstruction_loss(X_hat, X, importances)
             opt.zero_grad()
             loss.backward()
             opt.step()
@@ -146,6 +143,6 @@ if __name__ == '__main__':
 
     # this is slow but it makes the tensor dims less cluttered
     for idx, model in enumerate(models):
-        train_bottleneck_mlp(cfg, model, feature_probs[idx], importances)
+        train_bottleneck_model(cfg, model, feature_probs[idx], importances)
     
     plot_learned_features(cfg, models, feature_probs, importances)
